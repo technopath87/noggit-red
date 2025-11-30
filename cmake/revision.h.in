@@ -1,0 +1,3 @@
+#pragma once
+
+#define NOGGIT_GIT_VERSION_STRING "@NOGGIT_GIT_VERSION_STRING@"
