@@ -1,0 +1,108 @@
+name: Build and Lint
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-and-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Linux ${{ matrix.build_type }} build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ matrix.build_type }}-
+            ${{ runner.os }}-ccache-
+
+      - name: Cache CMake packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cmake
+          key: ${{ runner.os }}-cmake-${{ matrix.build_type }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-${{ matrix.build_type }}-
+            ${{ runner.os }}-cmake-
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            ccache \
+            cmake \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            liblua5.3-dev \
+            libqt5opengl5-dev \
+            libstorm-dev \
+            ninja-build \
+            qtbase5-dev \
+            qtbase5-dev-tools \
+            qtchooser \
+            qt5-qmake
+          if ! sudo apt-get install -y libcasc-dev; then
+            sudo apt-get install -y libcasclib-dev || true
+          fi
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+  lint:
+    name: C++ lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install lint dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --error-exitcode=1 --inline-suppr --std=c++17 \
+            --enable=warning,style,performance \
+            --suppress=missingIncludeSystem \
+            -I include \
+            src
+
+  required-checks:
+    if: ${{ always() }}
+    needs: [build, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure required jobs succeeded
+        run: |
+          if [[ "${{ needs.build.result }}" != "success" || "${{ needs.lint.result }}" != "success" ]]; then
+            echo "Required checks failed" >&2
+            exit 1
+          fi
+          echo "All required checks passed"

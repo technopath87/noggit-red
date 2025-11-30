@@ -9,6 +9,8 @@
 !/src/**
 !/test/**
 !/.idea/**
+!/.github
+!/.github/**
 !.gitignore
 !.CMakeLists.txt
 !COPYING
