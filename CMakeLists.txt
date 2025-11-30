@@ -6,82 +6,25 @@
 # ░███  ░░█████ ░░███     ███ ░░███  ░░███ ░░███  ░░███  ░███     ░███        ░███    ░███  ░███ ░   █ ░███    ███
 # █████  ░░█████ ░░░███████░   ░░█████████  ░░█████████  █████    █████       █████   █████ ██████████ ██████████
 #░░░░░    ░░░░░    ░░░░░░░      ░░░░░░░░░    ░░░░░░░░░  ░░░░░    ░░░░░       ░░░░░   ░░░░░ ░░░░░░░░░░ ░░░░░░░░░░
-CMAKE_MINIMUM_REQUIRED(VERSION 3.3)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.20)
 CMAKE_POLICY(SET CMP0057 NEW) # "Support new IN_LIST if() operator."
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 #Including cmake dependencies
-INCLUDE(CheckCXXCompilerFlag)
-INCLUDE(cmake/cmake_function.cmake)
-INCLUDE(cmake/cmake_macro.cmake)
-option(FAST_BUILD_FETCHCONTENT "Skip FetchContent check when for existing source directories (WARNING: This means dependencies aren't updated)" OFF)
-INCLUDE(cmake/FetchContentFast.cmake)
-INCLUDE(FetchContent)
+include(ProjectUtilities)
+include(CompilerOptions)
+include(Dependencies)
 
 #Project name
 PROJECT(Noggit)
 
-#Covered by CMAKE_CXX_STANDARD
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-c++98-compat)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-c++98-compat-pedantic)
-#Covered by compilers used
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-gnu-anonymous-struct)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-variadic-macros)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-vla)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-vla-extension)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-zero-length-array)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-gnu-zero-variadic-macro-arguments)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-nested-anon-types)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-four-char-constants)
-#We assume that our constructors and destructors do not access other global state
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-exit-time-destructors)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-global-constructors)
-#Is fine with GNU, required due to our libstdc
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-disabled-macro-expansion)
-#We can live with the compilation unit containing the vtable not being fixed
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-weak-vtables)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-weak-template-vtables)
-# __DATE__ and __TIME__ not being reproducible is exactly why they exist.
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-date-time)
-#We don't care for a few bytes
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-padded)
-#Msvc++ mangles struct/class into name, thus symbols may be called differently
-#With a bad forward-decl. we want compilation to fail, not linking.
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS /we4099)
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Werror=mismatched-tags)
-#Yes, we intend to use multi-character character constants
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS -Wno-multichar)
-#Better exception handling for visual studio, particularly for the asynchronous stuff
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS /EHa)
-#Multi core building for visual studio
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS /MP)
-#Allow Big obj for msvc compilation
-add_compiler_flag_if_supported(CMAKE_CXX_FLAGS /bigobj)
+# Keep these options defined before they are used by helper modules
+OPTION(NAME_REUSE_AS_ERROR "Make name reuse warnings errors ?" OFF)
+OPTION(ADDITIONAL_OPTIMIZATION_FLAGS "Enable extra MSVC optimization flags" OFF)
 
-add_compiler_flag_if_supported (CMAKE_C_FLAGS -Wno-implicit-function-declaration)
-
-IF(WIN32)
-  OPTION(NAME_REUSE_AS_ERROR "Make name reuse warnings errors ?" OFF)
-  IF(NAME_REUSE_AS_ERROR)
-    # declaration of 'identifier' hides previous:
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /we4456) # local declaration
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /we4457) # function parameter
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /we4458) # class members
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /we4459) # global declaration
-  ENDIF()
-
-  OPTION(ADDITIONAL_OPTIMIZATION_FLAGS "Enable OpenGL error check ?" OFF)
-  IF(ADDITIONAL_OPTIMIZATION_FLAGS)
-    MESSAGE( STATUS "Enabled additional optimization flags for msvc.")
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /Ob2) # inline any suitable functions
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /Oi)  # enable intrasic functions
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /Ot)  # favor fast code
-    add_compiler_flag_if_supported (CMAKE_CXX_FLAGS /GL)  # whole program optimization
-  ENDIF()
-ENDIF()
-
-SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 SET(EXECUTABLE_OUTPUT_PATH bin)
 SET(LIBARY_OUTPUT_PATH bin)
 SET(EXTERNAL_SOURCE_DIR src/external)
@@ -106,12 +49,7 @@ FIND_PACKAGE(OpenGL REQUIRED)
 FIND_PACKAGE(Json REQUIRED)
 FIND_PACKAGE(lodepng REQUIRED)
 
-FetchContent_Declare(
-  FastNoise2
-  GIT_REPOSITORY https://github.com/Auburn/FastNoise2.git
-  GIT_TAG v0.10.0-alpha
-)
-FetchContent_MakeAvailable(FastNoise2)
+noggit_ensure_fastnoise2()
 
 FIND_PACKAGE(Sol2 REQUIRED)
 FIND_PACKAGE(Qt5 COMPONENTS Widgets OpenGLExtensions Gui Network Xml Multimedia REQUIRED)
@@ -319,9 +257,36 @@ ADD_EXECUTABLE(noggit
   ${force_update_file}
 )
 
+noggit_apply_common_compile_options(noggit)
+
+IF(NOGGIT_ALL_WARNINGS)
+  noggit_enable_all_warnings(noggit)
+ENDIF()
+
+set(_warnings_as_errors_default OFF)
+if(DEFINED ENV{CI})
+  set(_warnings_as_errors_default ON)
+endif()
+option(NOGGIT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${_warnings_as_errors_default})
+if(NOGGIT_WARNINGS_AS_ERRORS)
+  noggit_enable_warnings_as_errors(noggit)
+endif()
+
+IF(WIN32 AND NAME_REUSE_AS_ERROR)
+  noggit_enable_name_reuse_errors(noggit)
+ENDIF()
+
+IF(WIN32 AND ADDITIONAL_OPTIMIZATION_FLAGS)
+  MESSAGE( STATUS "Enabled additional optimization flags for msvc.")
+  noggit_enable_additional_msvc_optimizations(noggit)
+ENDIF()
+
 add_library(blizzard-archive-library STATIC ${archive_sources} ${archive_headers})
 add_library(blizzard-database-library STATIC ${database_sources} ${database_headers})
 target_link_libraries(blizzard-archive-library StormLib CascLib)
+
+noggit_apply_common_compile_options(blizzard-archive-library)
+noggit_apply_common_compile_options(blizzard-database-library)
 
 if (UNIX)
   FIND_PACKAGE(BZip2 REQUIRED)
